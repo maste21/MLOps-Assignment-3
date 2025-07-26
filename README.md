@@ -2,11 +2,10 @@
 
     python quantize.py
 
-Sklearn R² score: 0.5758
-Quantized PyTorch R² score: -1048.0038
 
-Comparison Table:
-| Metric               | Original Sklearn Model | Quantized Model |
-|----------------------|------------------------|-----------------|
-| R² Score            | 0.5758            | -1048.0038     |
-| Model Size (KB)     | 0.40 KB          | 0.43 KB    |
+=== Quantization Results ===
+| Metric               | Original Model | Quantized Model |
+|----------------------|----------------|-----------------|
+| R² Score            | 0.575788 | -0.179779 |
+| Model Size (KB)     | 0.288 KB | 0.346 KB |
+| Size Reduction      | -20.1%          |

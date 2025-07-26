@@ -4,86 +4,74 @@ import torch.nn as nn
 from joblib import load, dump
 from sklearn.datasets import fetch_california_housing
 from sklearn.model_selection import train_test_split
-
-sklearn_model = load('linear_regression.joblib')
-
-weights = sklearn_model.coef_
-bias = sklearn_model.intercept_
-
-unquant_params = {
-    'weights': weights,
-    'bias': bias
-}
-dump(unquant_params, 'unquant_params.joblib')
-
-def quantize(arr):
-    min_val = np.min(arr)
-    max_val = np.max(arr)
-    if min_val == max_val:
-        return np.zeros_like(arr, dtype=np.uint8), 1.0, 0.0
-    scale = (max_val - min_val) / 255
-    zero_point = np.round(-min_val / scale)
-    quantized = np.round(arr / scale + zero_point).astype(np.uint8)
-    return quantized, scale, zero_point
-
-quant_weights, w_scale, w_zero = quantize(weights)
-quant_bias, b_scale, b_zero = quantize(np.array([bias]))  
-
-quant_params = {
-    'weights': quant_weights,
-    'bias': quant_bias[0],  
-    'w_scale': w_scale,
-    'w_zero': w_zero,
-    'b_scale': b_scale,
-    'b_zero': b_zero
-}
-dump(quant_params, 'quant_params.joblib')
-
-def dequantize(quantized, scale, zero_point):
-    return (quantized.astype(np.float32) - zero_point) * scale
-
-dequant_weights = dequantize(quant_weights, w_scale, w_zero)
-dequant_bias = dequantize(np.array([quant_bias]), b_scale, b_zero)[0] 
-
-class SingleLayerNN(nn.Module):
-    def __init__(self, input_size):
-        super().__init__()
-        self.linear = nn.Linear(input_size, 1)
-    
-    def forward(self, x):
-        return self.linear(x)
-
-data = fetch_california_housing()
-model = SingleLayerNN(data.data.shape[1])
-
-with torch.no_grad():
-    model.linear.weight.data = torch.from_numpy(dequant_weights).float().unsqueeze(0)
-    model.linear.bias.data = torch.tensor(dequant_bias).float()
-
-torch.save(model.state_dict(), 'quantized_model.pth')
-
-X, y = data.data, data.target
-_, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-sklearn_score = sklearn_model.score(X_test, y_test)
-
-X_test_tensor = torch.from_numpy(X_test).float()
-y_test_tensor = torch.from_numpy(y_test).float()
-with torch.no_grad():
-    predictions = model(X_test_tensor).squeeze()
-    ss_res = torch.sum((y_test_tensor - predictions) ** 2)
-    ss_tot = torch.sum((y_test_tensor - torch.mean(y_test_tensor)) ** 2)
-    pytorch_score = 1 - ss_res / ss_tot
-
-print(f"Sklearn R² score: {sklearn_score:.4f}")
-print(f"Quantized PyTorch R² score: {pytorch_score.item():.4f}")
-
 import os
-unquant_size = os.path.getsize('unquant_params.joblib') / 1024
-quant_size = os.path.getsize('quant_params.joblib') / 1024
 
-print("\nComparison Table:")
-print("| Metric               | Original Sklearn Model | Quantized Model |")
-print("|----------------------|------------------------|-----------------|")
-print(f"| R² Score            | {sklearn_score:.4f}            | {pytorch_score.item():.4f}     |")
-print(f"| Model Size (KB)     | {unquant_size:.2f} KB          | {quant_size:.2f} KB    |")
+def quantize(params):
+    params = np.array(params, dtype=np.float32)
+    min_val = np.min(params)
+    max_val = np.max(params)
+    
+    if np.isclose(min_val, max_val, atol=1e-6):
+        return np.zeros_like(params, dtype=np.uint8), 1.0, min_val
+    
+    scale = 255.0 / (max_val - min_val)
+    quantized = np.clip(np.round(scale * (params - min_val)), 0, 255).astype(np.uint8)
+    return quantized, (max_val - min_val)/255.0, min_val
+
+def get_file_size_kb(filename):
+    return round(os.path.getsize(filename) / 1024, 3)
+
+def main():
+    sklearn_model = load('linear_regression.joblib')
+    weights = sklearn_model.coef_.astype(np.float32)
+    bias = np.float32(sklearn_model.intercept_)
+    
+    dump({'weights': weights, 'bias': bias}, 'unquant_params.joblib', compress=3)
+    unquant_size = get_file_size_kb('unquant_params.joblib')
+    
+    quant_w, w_scale, w_min = quantize(weights)
+    quant_b, b_scale, b_min = quantize(bias)
+    
+    quant_params = {
+        'weights': quant_w,
+        'bias': quant_b,
+        'w_scale': np.float32(w_scale),
+        'w_min': np.float32(w_min),
+        'b_scale': np.float32(b_scale),
+        'b_min': np.float32(b_min)
+    }
+    dump(quant_params, 'quant_params.joblib', compress=3)
+    quant_size = get_file_size_kb('quant_params.joblib')
+    
+    dequant_w = w_scale * quant_w.astype(np.float32) + w_min
+    dequant_b = b_scale * quant_b.astype(np.float32) + b_min
+    
+    model = nn.Linear(weights.shape[0], 1)
+    with torch.no_grad():
+        model.weight.data = torch.from_numpy(dequant_w).float().unsqueeze(0)
+        model.bias.data = torch.tensor(dequant_b).float()
+    
+    X, y = fetch_california_housing(return_X_y=True)
+    _, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    sklearn_score = sklearn_model.score(X_test, y_test)
+    
+    X_test_tensor = torch.from_numpy(X_test).float()
+    y_test_tensor = torch.from_numpy(y_test).float()
+    with torch.no_grad():
+        predictions = model(X_test_tensor).squeeze()
+        ss_res = torch.sum((y_test_tensor - predictions) ** 2)
+        ss_tot = torch.sum((y_test_tensor - torch.mean(y_test_tensor)) ** 2)
+        pytorch_score = 1 - (ss_res / ss_tot).item()
+    
+    reduction = (unquant_size - quant_size) / unquant_size * 100
+    
+    print("\n=== Quantization Results ===")
+    print("| Metric               | Original Model | Quantized Model |")
+    print("|----------------------|----------------|-----------------|")
+    print(f"| R² Score            | {sklearn_score:.6f} | {pytorch_score:.6f} |")
+    print(f"| Model Size (KB)     | {unquant_size:.3f} KB | {quant_size:.3f} KB |")
+    print(f"| Size Reduction      | {reduction:.1f}%          |")
+
+if __name__ == "__main__":
+    main()
