@@ -20,6 +20,7 @@ This project implements an end-to-end MLOps pipeline for California Housing pric
 
 ### Quantization Results:     
 Run the below command in quantization branch
+
     python quantize.py
 
 === Quantization Results ===
