@@ -2,13 +2,13 @@
 
 This project implements an end-to-end MLOps pipeline for California Housing price prediction using:
 
-Scikit-learn Linear Regression
-PyTorch Neural Network
-Docker containerization
-GitHub Actions 
-Manual model quantization
+     Scikit-learn Linear Regression
+     PyTorch Neural Network
+     Docker containerization
+     GitHub Actions 
+     Manual model quantization
 
-# Clone locally:
+### Clone locally:
 
      git clone https://github.com/maste21/MLOps-Assignment-3.git
 
@@ -18,7 +18,7 @@ Manual model quantization
    
      pip install -r requirements.txt
 
-# Quantization Results:     
+### Quantization Results:     
 Run the below command in quantization branch
     python quantize.py
 
@@ -30,8 +30,9 @@ Run the below command in quantization branch
 | Size Reduction      | -20.1%          |
 
 # Branching Strategy
-main: Initial setup and documentation
-dev: Model development and training
-docker_ci: Docker containerization and pipeline
-quantization: Model quantization and optimization
+
+     main: Initial setup and documentation
+     dev: Model development and training
+     docker_ci: Docker containerization and pipeline
+     quantization: Model quantization and optimization
 
