@@ -39,7 +39,7 @@ jobs:
 
     - name: Test Docker container
       run: |
-        docker run --rm housing-predictor:latest python src/predict.py
+        docker run --rm housing-predictor:latest python predict.py
 
     - name: Login to Docker Hub
       if: success()
