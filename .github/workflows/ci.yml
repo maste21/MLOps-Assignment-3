@@ -31,7 +31,7 @@ jobs:
     - name: Verify model files exist
       run: |
         ls -la 
-        test -f linear_model.joblib
+        test -f linear_regression.joblib
 
     - name: Build Docker image
       run: |
